@@ -29,13 +29,25 @@ def get_alpaca_percentages():
     for asset in holdings:
         rounded_qty = round(float(asset.qty))
         total_per += rounded_qty
-        assets.update({asset.symbol: rounded_qty})
+        assets.update({asset.symbol: {"rounded_qty": rounded_qty,
+                                      "qty": float(asset.qty)}})
+    
     # Convert to percentages
     percentages = {}
+    per_checksum = 0
     for asset, qty in assets.items():
-        percentages.update({asset: round((qty/total_per)*100)})
+        amount = round((qty["rounded_qty"]/total_per)*100)
+        per_checksum += amount
+        percentages.update({asset: amount})
 
-    return percentages
+    # Lets validate that we have the correct percentage
+    if per_checksum != 99:
+        raise Exception("Checksum missmatch")
+    
+    percentages.update({"checksum": per_checksum})
+
+    return {"percentages": percentages,
+            "assets": assets}
 
 def check_for_change():
     """Handles checking if a change has occured compared
