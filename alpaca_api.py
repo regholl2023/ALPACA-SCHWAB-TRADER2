@@ -1,5 +1,7 @@
 from alpaca.trading.client import TradingClient
+from logger_config import setup_logger
 from dotenv import load_dotenv
+from pprint import pformat
 import yaml
 import os
 
@@ -7,6 +9,8 @@ import os
 load_dotenv()
 
 PAPER = False
+
+logger = setup_logger('alpaca_api', 'logs/alpaca.log')
 
 def get_alpaca_percentages():
     """Used to collect the position percentages
@@ -30,7 +34,7 @@ def get_alpaca_percentages():
     percentages = {}
     for asset, qty in assets.items():
         percentages.update({asset: round((qty/total_per)*100)})
-    
+
     return percentages
 
 def check_for_change():
@@ -51,6 +55,7 @@ def check_for_change():
             saved_pos = yaml.safe_load(file)
         
         if cur_positions != saved_pos:
+            logger.info(f"===\nOld: \n{pformat(saved_pos)}\nNew: \n{pformat(cur_positions)}\n===")
             return True
         
     return False
