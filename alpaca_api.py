@@ -67,7 +67,7 @@ def check_for_change():
             saved_pos = yaml.safe_load(file)
         
         if cur_positions != saved_pos:
-            logger.info(f"===\nOld: \n{pformat(saved_pos)}\nNew: \n{pformat(cur_positions)}\n===")
+            logger.info(f"\n===\n!!! Changes Detected !!!\nOld Holdings: \n{pformat(saved_pos)}\nNew Holdings: \n{pformat(cur_positions)}\n===")
             return True
         
     return False
