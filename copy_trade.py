@@ -13,6 +13,8 @@ load_dotenv()
 # --------------------------------------
 # How often we want to check for changes
 PERIOD = 1
+# How many times we want to retry actions
+RETRY = 3
 # --------------------------------------
 
 def execute_trades_across_accounts(percentages: dict) -> bool:
@@ -35,6 +37,9 @@ def execute_trades_across_accounts(percentages: dict) -> bool:
         
     # Iterate over all the accounts we selected and execute trades
     for account in accounts:
+        # TODO: Just place holders for now
+        breakdown_account_by_quotes()
+        submit_orders()
         pass
     
     return False
@@ -55,16 +60,16 @@ if __name__ == '__main__':
         if check_for_change():
             logger.info("\n=== Change Detected ===\n")
             # Either sleep for a period or we check that all orders on Alpaca are done
-            output = execute_trades_across_accounts(get_alpaca_percentages())
-            
-            if output is True:
-                logger.info("\n=== Trading Completed Successfully ===\n")
-                # Nothing else to do lets go back to checking for changes
-                continue
-            else:
-                # Lets get into a lock so we dont trade anyfurther
-                while True:
-                    logger.error("\n!!! Trading FAILED !!!\n")
+            count = 1
+            while count <= RETRY:
+                output = execute_trades_across_accounts(get_alpaca_percentages())
+                
+                if output is True:
+                    logger.info("\n=== Trading Completed Successfully on Attempt {count} ===\n")
+                    # Nothing else to do lets go back to checking for changes
+                else:
+                    logger.error("\n!!! Trading FAILED Attempt {count} !!!\n")
                     # Lets send an Email/SMS that a trade failure occured 
                     pass
+                count += 1
             
