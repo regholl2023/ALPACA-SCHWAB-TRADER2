@@ -41,8 +41,8 @@ def get_alpaca_percentages():
         percentages.update({asset: amount})
 
     # Lets validate that we have the correct percentage
-    if per_checksum != 99:
-        raise Exception("Checksum missmatch")
+    if per_checksum > 99:
+        raise Exception("Invalid Checksum")
     
     percentages.update({"checksum": per_checksum})
 

@@ -60,16 +60,16 @@ if __name__ == '__main__':
         if check_for_change():
             logger.info("\n=== Change Detected ===\n")
             # Either sleep for a period or we check that all orders on Alpaca are done
-            count = 1
-            while count <= RETRY:
-                output = execute_trades_across_accounts(get_alpaca_percentages())
+            # count = 1
+            # while count <= RETRY:
+            #     output = execute_trades_across_accounts(get_alpaca_percentages())
                 
-                if output is True:
-                    logger.info("\n=== Trading Completed Successfully on Attempt {count} ===\n")
-                    # Nothing else to do lets go back to checking for changes
-                else:
-                    logger.error("\n!!! Trading FAILED Attempt {count} !!!\n")
-                    # Lets send an Email/SMS that a trade failure occured 
-                    pass
-                count += 1
+            #     if output is True:
+            #         logger.info("\n=== Trading Completed Successfully on Attempt {count} ===\n")
+            #         # Nothing else to do lets go back to checking for changes
+            #     else:
+            #         logger.error("\n!!! Trading FAILED Attempt {count} !!!\n")
+            #         # Lets send an Email/SMS that a trade failure occured 
+            #         pass
+            #     count += 1
             
