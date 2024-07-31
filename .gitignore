@@ -3,3 +3,4 @@
 *.pyc
 saved_pos.yaml
 /logs
+tmp_token

@@ -47,9 +47,7 @@ def execute_trades_across_accounts(percentages: dict) -> bool:
 # How we run the copy trade method
 if __name__ == '__main__':
     while True:
-        time.sleep(PERIOD)
-        
-        if is_token_valid is False:
+        if is_token_valid() is False:
             # If the token is invalid lets get into an infinite loop of notifications
             while True:
                 logger.error("\n!!! Invalid Token !!!\n")
@@ -72,4 +70,6 @@ if __name__ == '__main__':
             #         # Lets send an Email/SMS that a trade failure occured 
             #         pass
             #     count += 1
+            
+        time.sleep(PERIOD)
             
