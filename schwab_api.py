@@ -1,7 +1,6 @@
 from schwab.auth import client_from_login_flow, easy_client
 from logger_config import setup_logger
 from dotenv import load_dotenv
-import schwab.client as Client
 from enum import Enum
 import httpx
 import os
