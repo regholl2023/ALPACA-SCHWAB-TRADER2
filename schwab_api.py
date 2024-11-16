@@ -177,7 +177,7 @@ class schwab_client:
             int/None: int value or None if not found
         """
         account_total = self.get_account_holding_value(account_num)
-        account_total = 33170.19
+
         if account_total is None:
             logger.error("!!! Failed to get account hash !!!")
             return None
@@ -200,7 +200,6 @@ class schwab_client:
             dict: Breakdown of the amount of each ticker to buy
         """
         total = self.get_account_trade_value(account_num)
-        total = 32670.19
 
         check_sum = 0
         for stock in percentages:
@@ -250,7 +249,7 @@ if __name__ == '__main__':
     # Used for Testing
     schwab_conn = schwab_client()
     # print(schwab_conn.get_quotes({"AAPL", "MSFT"}))
-    # print(schwab_conn.get_account_trade_value("34147948"))
-    pp(schwab_conn.breakdown_account_by_quotes("34147948", get_alpaca_percentages()["percentages"]))
+    # print(schwab_conn.get_account_trade_value("Removed"))
+    # pp(schwab_conn.breakdown_account_by_quotes("Removed", get_alpaca_percentages()["percentages"]))
     # Used to fetch a token
     # client_from_login_flow(api_key=os.getenv("SCWAHB_API_KEY"), app_secret=os.getenv("SCWAHB_SECRET_KEY"),callback_url=os.getenv("CALLBACK_URL"), token_path=os.getenv("TMP_TOKEN_PATH"))
