@@ -1,8 +1,9 @@
 from schwab.auth import client_from_login_flow, easy_client
 from logger_config import setup_logger
 from dotenv import load_dotenv
+from alpaca_api import get_alpaca_percentages
 from enum import Enum
-from pprint import pp
+from pprint import pp, pformat
 import httpx
 import os
 
@@ -17,6 +18,12 @@ class Modes(Enum):
     # Run logic and send orders to broker
     LIVE = 2,
     
+class ShareRounding(Enum):
+    # Your typical roudning .5+ goes to 1 .5- goes to 0
+    NEAREST = 1,
+    # Rounds down .99 goes to 0
+    DOWN = 1,
+    
 # --------------------------------------
 # Used to dictate if orders are real or not
 MODE = Modes.DEBUG
@@ -27,7 +34,9 @@ TRADE_WITH = 100
 #  This is the amount that will be used as the starting point for all calculations when determining how many shares to purchase, etc.  
 #  This allows for some slippage, etc.
 # Minimum value for padding is $500
-PADDING = 500
+PADDING = 500.0
+# Which way to round shares
+SHARE_ROUND = ShareRounding.DOWN
 # --------------------------------------
 
 def create_client():
@@ -135,7 +144,6 @@ class schwab_client:
         account_hashes = {account.get("accountNumber"): account.get("hashValue") for account in account_hashes}
         return account_hashes.get(account_num, None)
         
-
     def get_account_holding_value(self, account_num: str):
         """Used to collect the value of the 
 
@@ -156,7 +164,6 @@ class schwab_client:
             return None
 
         account_details = resp.json()
-        pp(account_details)
         total_value = account_details["securitiesAccount"]["currentBalances"]["liquidationValue"]
         return total_value
     
@@ -169,13 +176,20 @@ class schwab_client:
         Returns:
             int/None: int value or None if not found
         """
-        account_hash = self.get_account_hash(account_num)
-
-        if account_hash is None:
+        account_total = self.get_account_holding_value(account_num)
+        account_total = 33170.19
+        if account_total is None:
             logger.error("!!! Failed to get account hash !!!")
             return None
+        
+        if account_total < 1.0:
+            logger.error("!!! Account has to low of a balance !!!")
+            return None
+        
+        logger.info(f"\nAccount Total: {account_total} Trading with: {TRADE_WITH}% Padding: {PADDING}\nCalculated Trade Value: {round(account_total * (TRADE_WITH/100) - PADDING, 2)}\nCalculation: (Account Total * (Trading With/100) - Padding) Rounded to two decimals")
+        return round(account_total * (TRADE_WITH/100) - PADDING, 2)
 
-    def breakdown_account_by_quotes(self, account_num: str, percentages: dict) -> dict:
+    def breakdown_account_by_percentages(self, account_num: str, percentages: dict) -> dict:
         """Used to breakout an accounts value by the percentages from Alpaca, TRADE_WITH, and PADDING
 
         Args:
@@ -185,21 +199,20 @@ class schwab_client:
         Returns:
             dict: Breakdown of the amount of each ticker to buy
         """
-        account_hash = self.get_account_hash(account_num)
+        total = self.get_account_trade_value(account_num)
+        total = 32670.19
 
-        if account_hash is None:
-            logger.error("!!! Failed to get account hash !!!")
-            return None
+        check_sum = 0
+        for stock in percentages:
+            percentages[stock] = round(total * percentages[stock]/100, 2)
+            if stock != "checksum":
+                check_sum += percentages[stock]
         
-        resp = self.c.get_account(account_hash)
-
-        if resp.status_code != httpx.codes.OK:
-            logger.error("!!! Failed to get account !!!")
-            return None
+        logger.info(f"\n=== \n(What will be applied to Schwab account)\nBreaking down account {account_num} using account value of ${total}\nChecksum: {round(check_sum, 2)}\nBreakdown:{pformat(percentages)}\n===")
         
-        account_details = resp.json()
-        total_value = account_details
-        return 
+        # TODO: Then break down how much of each ticker to by rounded to whole numbers
+        
+        return percentages
 
     def check_orders(self, account_hash: str):
         """Used to check for orders
@@ -237,6 +250,7 @@ if __name__ == '__main__':
     # Used for Testing
     schwab_conn = schwab_client()
     # print(schwab_conn.get_quotes({"AAPL", "MSFT"}))
-    print(schwab_conn.get_account_holding_value("Insert Account Num"))
+    # print(schwab_conn.get_account_trade_value("34147948"))
+    pp(schwab_conn.breakdown_account_by_quotes("34147948", get_alpaca_percentages()["percentages"]))
     # Used to fetch a token
     # client_from_login_flow(api_key=os.getenv("SCWAHB_API_KEY"), app_secret=os.getenv("SCWAHB_SECRET_KEY"),callback_url=os.getenv("CALLBACK_URL"), token_path=os.getenv("TMP_TOKEN_PATH"))

@@ -1,7 +1,7 @@
 from alpaca.trading.client import TradingClient
 from logger_config import setup_logger
 from dotenv import load_dotenv
-from pprint import pformat
+from pprint import pp, pformat
 import yaml
 import os
 
@@ -27,7 +27,7 @@ def get_alpaca_percentages():
     assets = {}
     total_per = 0
     for asset in holdings:
-        rounded_qty = round(float(asset.qty))
+        rounded_qty = round(float(asset.qty), 2)
         total_per += rounded_qty
         assets.update({asset.symbol: {"rounded_qty": rounded_qty,
                                       "qty": float(asset.qty)}})
@@ -36,12 +36,12 @@ def get_alpaca_percentages():
     percentages = {}
     per_checksum = 0
     for asset, qty in assets.items():
-        amount = round((qty["rounded_qty"]/total_per)*100)
+        amount = round((qty["rounded_qty"]/total_per)*100, 2)
         per_checksum += amount
         percentages.update({asset: amount})
 
     # Lets validate that we have the correct percentage
-    if per_checksum > 99:
+    if per_checksum < 99:
         raise Exception("Invalid Checksum")
     
     percentages.update({"checksum": per_checksum})
@@ -72,3 +72,5 @@ def check_for_change():
         
     return False
     
+if __name__ == '__main__':
+    pp(get_alpaca_percentages())

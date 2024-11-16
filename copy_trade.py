@@ -1,4 +1,4 @@
-from schwab_api import breakdown_account_by_quotes, submit_orders, is_token_valid
+from schwab_api import schwab_client
 from alpaca_api import check_for_change, get_alpaca_percentages
 from logger_config import setup_logger
 from dotenv import load_dotenv
@@ -38,16 +38,15 @@ def execute_trades_across_accounts(percentages: dict) -> bool:
     # Iterate over all the accounts we selected and execute trades
     for account in accounts:
         # TODO: Just place holders for now
-        breakdown_account_by_quotes()
-        submit_orders()
         pass
     
     return False
 
 # How we run the copy trade method
 if __name__ == '__main__':
+    schwab = schwab_client()
     while True:
-        if is_token_valid() is False:
+        if schwab.is_token_valid() is False:
             # If the token is invalid lets get into an infinite loop of notifications
             while True:
                 logger.error("\n!!! Invalid Token !!!\n")
