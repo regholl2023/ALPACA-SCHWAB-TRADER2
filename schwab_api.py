@@ -2,6 +2,7 @@ from schwab.auth import client_from_login_flow, easy_client
 from logger_config import setup_logger
 from dotenv import load_dotenv
 from enum import Enum
+from pprint import pp
 import httpx
 import os
 
@@ -9,7 +10,6 @@ import os
 load_dotenv()
 
 logger = setup_logger('schwab_api', 'logs/schwab.log')
-
 
 class Modes(Enum):
     # Run logic but only log orders
@@ -115,25 +115,91 @@ class schwab_client:
         
         return resp.json()
 
-    def get_account_total_value(self, account_hash: str):
+    def get_account_hash(self, account_num: int):
+        """Used to get an accounts hash data
+
+        Args:
+            account_num (int): account num to get hash for
+
+        Returns:
+            str/None: str when found and None when not 
+        """
+        resp = self.c.get_account_numbers()
+        
+        if resp.status_code != httpx.codes.OK:
+            logger.error("!!! Failed to get accounts !!!")
+            return None
+        
+        account_hashes = resp.json()
+        # Convert the List of dictionaries into a dict
+        account_hashes = {account.get("accountNumber"): account.get("hashValue") for account in account_hashes}
+        return account_hashes.get(account_num, None)
+        
+
+    def get_account_holding_value(self, account_num: str):
         """Used to collect the value of the 
 
         Args:
-            account_hash (str): hash of account to interact with
+            account_num (str): hash of account to interact with
         """
-        pass
+        
+        account_hash = self.get_account_hash(account_num)
 
-    def breakdown_account_by_quotes(self, account_hash: str, percentages: dict) -> dict:
+        if account_hash is None:
+            logger.error("!!! Failed to get account hash !!!")
+            return None
+        
+        resp = self.c.get_account(account_hash)
+
+        if resp.status_code != httpx.codes.OK:
+            logger.error("!!! Failed to get account !!!")
+            return None
+
+        account_details = resp.json()
+        pp(account_details)
+        total_value = account_details["securitiesAccount"]["currentBalances"]["liquidationValue"]
+        return total_value
+    
+    def get_account_trade_value(self, account_num: str):
+        """Used to find how much of the account to trade with
+
+        Args:
+            account_num (str): _description_
+
+        Returns:
+            int/None: int value or None if not found
+        """
+        account_hash = self.get_account_hash(account_num)
+
+        if account_hash is None:
+            logger.error("!!! Failed to get account hash !!!")
+            return None
+
+    def breakdown_account_by_quotes(self, account_num: str, percentages: dict) -> dict:
         """Used to breakout an accounts value by the percentages from Alpaca, TRADE_WITH, and PADDING
 
         Args:
-            account_hash (str): hash of account to interact with
+            account_num (str): num of account to interact with
             percentages (dict): Percentage breakdown from Alpaca
 
         Returns:
             dict: Breakdown of the amount of each ticker to buy
         """
-        pass
+        account_hash = self.get_account_hash(account_num)
+
+        if account_hash is None:
+            logger.error("!!! Failed to get account hash !!!")
+            return None
+        
+        resp = self.c.get_account(account_hash)
+
+        if resp.status_code != httpx.codes.OK:
+            logger.error("!!! Failed to get account !!!")
+            return None
+        
+        account_details = resp.json()
+        total_value = account_details
+        return 
 
     def check_orders(self, account_hash: str):
         """Used to check for orders
@@ -170,6 +236,7 @@ class schwab_client:
 if __name__ == '__main__':
     # Used for Testing
     schwab_conn = schwab_client()
-    print(schwab_conn.get_quotes({"AAPL", "MSFT"}))
+    # print(schwab_conn.get_quotes({"AAPL", "MSFT"}))
+    print(schwab_conn.get_account_holding_value("Insert Account Num"))
     # Used to fetch a token
     # client_from_login_flow(api_key=os.getenv("SCWAHB_API_KEY"), app_secret=os.getenv("SCWAHB_SECRET_KEY"),callback_url=os.getenv("CALLBACK_URL"), token_path=os.getenv("TMP_TOKEN_PATH"))
