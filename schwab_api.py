@@ -5,6 +5,7 @@ from alpaca_api import get_alpaca_percentages
 from enum import Enum
 from pprint import pp, pformat
 import httpx
+import math
 import os
 
 # Load environment variables from .env file
@@ -22,8 +23,16 @@ class ShareRounding(Enum):
     # Your typical roudning .5+ goes to 1 .5- goes to 0
     NEAREST = 1,
     # Rounds down .99 goes to 0
-    DOWN = 1,
-    
+    DOWN = 2,
+
+class QuoteMode(Enum):
+    # Last updated price
+    LASTPRICE = "lastPrice",
+    # Current ask price
+    ASKPRICE = "askPrice",
+    # Market 
+    MARKET = "mark",
+
 # --------------------------------------
 # Used to dictate if orders are real or not
 MODE = Modes.DEBUG
@@ -36,7 +45,9 @@ TRADE_WITH = 100
 # Minimum value for padding is $500
 PADDING = 500.0
 # Which way to round shares
-SHARE_ROUND = ShareRounding.DOWN
+SHARE_ROUND = ShareRounding.NEAREST
+# When buying which mode to use
+BUY_MODE = QuoteMode.MARKET
 # --------------------------------------
 
 def create_client():
@@ -100,14 +111,14 @@ class schwab_client:
         if resp.status_code != httpx.codes.OK:
             logger.error("!!! Failed to grab accounts !!!")
             return False
-        
+
         # Lets grab the accounts we are expecting
         expected_accounts = read_in_accounts()
         
         ret_accounts = set()
         for account in resp.json():
             ret_accounts.add(account["accountNumber"])
-        
+
         return ret_accounts == expected_accounts
             
     def get_quotes(self, symbols: set):
@@ -143,35 +154,68 @@ class schwab_client:
         # Convert the List of dictionaries into a dict
         account_hashes = {account.get("accountNumber"): account.get("hashValue") for account in account_hashes}
         return account_hashes.get(account_num, None)
-        
-    def get_account_holding_value(self, account_num: str):
-        """Used to collect the value of the 
+    
+    def get_accout_details(self, account_num: int):
+        """Used to get account details
 
         Args:
-            account_num (str): hash of account to interact with
+            account_num (int): account number
+
+        Returns:
+            dict/None: dictionary of account details or None
         """
-        
         account_hash = self.get_account_hash(account_num)
 
         if account_hash is None:
             logger.error("!!! Failed to get account hash !!!")
             return None
         
-        resp = self.c.get_account(account_hash)
+        resp = self.c.get_account(account_hash, fields=[self.c.Account.Fields.POSITIONS])
 
         if resp.status_code != httpx.codes.OK:
             logger.error("!!! Failed to get account !!!")
             return None
 
         account_details = resp.json()
-        total_value = account_details["securitiesAccount"]["currentBalances"]["liquidationValue"]
-        return total_value
+        
+        return account_details
     
-    def get_account_trade_value(self, account_num: str):
+    def get_account_holdings(self, account_num: int):
+        """Used to get the holdings of an account
+
+        Args:
+            account_num (int): account number
+
+        Returns:
+            dict/None: dictionary of holdings or None
+        """
+        details = self.get_accout_details(account_num)
+        
+        if details is None:
+            return None
+        pp(details)
+        return details["securitiesAccount"]["positions"]
+    
+    def get_account_holding_value(self, account_num: int):
+        """Used to collect the value of the 
+
+        Args:
+            account_num (str): hash of account to interact with
+        """
+        details = self.get_accout_details(account_num)
+        
+        if details is None:
+            return None
+        
+        pp(details)
+        
+        return details["securitiesAccount"]["currentBalances"]["liquidationValue"]
+    
+    def get_account_trade_value(self, account_num: int):
         """Used to find how much of the account to trade with
 
         Args:
-            account_num (str): _description_
+            account_num (int): account number
 
         Returns:
             int/None: int value or None if not found
@@ -189,7 +233,7 @@ class schwab_client:
         logger.info(f"\nAccount Total: {account_total} Trading with: {TRADE_WITH}% Padding: {PADDING}\nCalculated Trade Value: {round(account_total * (TRADE_WITH/100) - PADDING, 2)}\nCalculation: (Account Total * (Trading With/100) - Padding) Rounded to two decimals")
         return round(account_total * (TRADE_WITH/100) - PADDING, 2)
 
-    def breakdown_account_by_percentages(self, account_num: str, percentages: dict) -> dict:
+    def breakdown_account_by_quotes(self, account_num: int, percentages: dict) -> dict:
         """Used to breakout an accounts value by the percentages from Alpaca, TRADE_WITH, and PADDING
 
         Args:
@@ -199,6 +243,8 @@ class schwab_client:
         Returns:
             dict: Breakdown of the amount of each ticker to buy
         """
+        logger.info(f"\n=== \nPercentages being used for breakdown \n{pformat(percentages)}\n===")
+        
         total = self.get_account_trade_value(account_num)
 
         check_sum = 0
@@ -207,21 +253,86 @@ class schwab_client:
             if stock != "checksum":
                 check_sum += percentages[stock]
         
-        logger.info(f"\n=== \n(What will be applied to Schwab account)\nBreaking down account {account_num} using account value of ${total}\nChecksum: {round(check_sum, 2)}\nBreakdown:{pformat(percentages)}\n===")
+        logger.info(f"\n=== \n(What will be applied to Schwab account)\nBreaking down account {account_num} using account value of ${total}\nChecksum: {round(check_sum, 2)}\nBreakdown:\n{pformat(percentages)}\n===")
         
-        # TODO: Then break down how much of each ticker to by rounded to whole numbers
+        ticker_quotes = {key for key in percentages.keys()}
+        ticker_quotes.remove("checksum")
+        ticker_data = self.get_quotes(ticker_quotes)
         
-        return percentages
+        buy_amounts = {}
+        quotes = {}
+        for stock in percentages:
+            # We want to ignore the checksum
+            if stock == "checksum":
+                continue
+            # Compile the quotes into a single dictionary for logging
+            quotes[stock] = ticker_data[stock]["quote"][BUY_MODE.value[0]]
+            # Based on setting we may want to round differently
+            if SHARE_ROUND is ShareRounding.NEAREST:
+                buy_amounts[stock] = round(percentages[stock]/quotes[stock] )
+            elif SHARE_ROUND is ShareRounding.DOWN:
+                buy_amounts[stock] = math.floor(percentages[stock]/quotes[stock] )
+        
+        rounding = "Nearest" if SHARE_ROUND is ShareRounding.NEAREST else "Down"
+        
+        logger.info(f"\n=== Quotes used: \n{pformat(quotes)} \n===")
+        logger.info(f"\n=== Ticker buy amounts based on above Totals/Quotes w/ {rounding} Rounding \n{pformat(buy_amounts)}\n===")
+        
+        return buy_amounts
 
-    def check_orders(self, account_hash: str):
+    def liquidate_holdings(self, account_num: int):
+        """Used to liquidate the account holdings
+
+        Args:
+            account_num (int): account number
+
+        Returns:
+            list/None: list of orders created to sell/None if in debug mode
+        """
+        holdings = self.get_account_holdings(account_num)
+        
+        if holdings is None:
+            return False
+        
+        sell = {}
+        for holding in holdings:
+            sell[holding["instrument"]["symbol"]] = holding["instrument"]["longQuantity"]
+            
+        logger.info(f"\n===\n Holdings being liquidated: {pformat(sell)}\n===")
+        
+        if MODE is Modes.LIVE:
+            orders = []
+            for ticker, quantity in sell.items():
+                orders.append(self.c.place_order(self.c.orders.equities.equity_sell_market(symbol=ticker, quantity=quantity)))
+            
+            logger.info(f"\n===\n Orders: \n{pformat(orders)}\n===")
+        
+            return orders
+        else:
+            return None
+
+    def check_orders_for_completion(self, account_num: str, orders: list):
         """Used to check for orders
 
         Args:
             account_hash (str): hash of account to interact with
         """
-        pass
+        account_hash = self.get_account_hash(account_num)
+        
+        if account_hash is None:
+            return False
+        
+        order_details = []
+        for order in orders:
+            order_details.append(self.c.get_order(order, account_hash))
+        
+        for order in order_details:
+            if order["status"] != "FILLED":
+                return False
+            
+        return True
 
-    def submit_orders(self, account_hash: str, orders: list):
+    def submit_orders(self, account_num: int, orders: list):
         """Submit orders
 
         Args:
@@ -248,8 +359,9 @@ class schwab_client:
 if __name__ == '__main__':
     # Used for Testing
     schwab_conn = schwab_client()
-    # print(schwab_conn.get_quotes({"AAPL", "MSFT"}))
-    # print(schwab_conn.get_account_trade_value("Removed"))
-    # pp(schwab_conn.breakdown_account_by_quotes("Removed", get_alpaca_percentages()["percentages"]))
+    # TODO: Remove
+    # print(schwab_conn.get_account_trade_value("65992549"))
+    print(schwab_conn.get_account_holdings("65992549"))
+    # schwab_conn.breakdown_account_by_quotes("65992549", get_alpaca_percentages()["percentages"])
     # Used to fetch a token
     # client_from_login_flow(api_key=os.getenv("SCWAHB_API_KEY"), app_secret=os.getenv("SCWAHB_SECRET_KEY"),callback_url=os.getenv("CALLBACK_URL"), token_path=os.getenv("TMP_TOKEN_PATH"))
